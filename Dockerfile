@@ -1,4 +1,4 @@
-ARG TDARR_VERSION=2.68.01
+ARG TDARR_VERSION=2.71.01
 FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -99,28 +99,27 @@ RUN git clone --depth 1 --branch release-3.0.6 \
 
 # MUST be R73 or later — av1an 0.5.2 uses vapoursynth-rs v0.5.1 which requires
 # VSScript API v4. R72 only provides API v3 and will fail to load at runtime.
-RUN git clone --depth 1 --branch R74 \
+RUN git clone --depth 1 --branch R75 \
         https://github.com/vapoursynth/vapoursynth.git /src/vapoursynth && \
     cd /src/vapoursynth && \
-    # R74 switched from autotools to Meson and only builds vspipe + the Python
-    # module when build_wheel=true. That flag redirects installs into Python's
-    # site-packages; we build with it, then move artifacts to standard paths.
-    meson setup build --prefix=/usr/local --buildtype=release \
-        -Dbuild_wheel=true && \
+    # R75 unconditionally installs every artifact (libs, vspipe, headers,
+    # pkgconfig) into the Python site-packages 'vapoursynth' subdirectory.
+    # We relocate the libs and vspipe to standard /usr/local paths and write
+    # our own headers + pc files there.
+    meson setup build --prefix=/usr/local --buildtype=release && \
     ninja -C build && \
     ninja -C build install && \
     VS_PKG="$(find /usr/local/lib -path '*/vapoursynth/libvapoursynth.so.4' -printf '%h' -quit)" && \
     cp -a "${VS_PKG}"/lib*.so* /usr/local/lib/ && \
     cp "${VS_PKG}/vspipe" /usr/local/bin/ && \
-    # Install headers and pkgconfig that build_wheel skips
     install -d /usr/local/include/vapoursynth && \
     cp include/*.h /usr/local/include/vapoursynth/ && \
     install -d /usr/local/lib/pkgconfig && \
-    printf 'prefix=/usr/local\nlibdir=${prefix}/lib\nincludedir=${prefix}/include/vapoursynth\n\nName: vapoursynth\nDescription: VapourSynth\nVersion: 74\nLibs: -L${libdir} -lvapoursynth\nCflags: -I${includedir}\n' \
+    printf 'prefix=/usr/local\nlibdir=${prefix}/lib\nincludedir=${prefix}/include/vapoursynth\n\nName: vapoursynth\nDescription: VapourSynth\nVersion: 75\nLibs: -L${libdir} -lvapoursynth\nCflags: -I${includedir}\n' \
         > /usr/local/lib/pkgconfig/vapoursynth.pc && \
-    printf 'prefix=/usr/local\nlibdir=${prefix}/lib\nincludedir=${prefix}/include/vapoursynth\n\nName: vsscript\nDescription: VapourSynth Script Library\nVersion: 74\nRequires: vapoursynth\nLibs: -L${libdir} -lvsscript\nCflags: -I${includedir}\n' \
+    printf 'prefix=/usr/local\nlibdir=${prefix}/lib\nincludedir=${prefix}/include/vapoursynth\n\nName: vsscript\nDescription: VapourSynth Script Library\nVersion: 75\nRequires: vapoursynth\nLibs: -L${libdir} -lvsscript\nCflags: -I${includedir}\n' \
         > /usr/local/lib/pkgconfig/vsscript.pc && \
-    # R74 renamed libvapoursynth-script → libvsscript. av1an's vapoursynth-rs
+    # R74+ renamed libvapoursynth-script → libvsscript. av1an's vapoursynth-rs
     # crate still links -lvapoursynth-script, so provide a compat symlink.
     ln -sf libvsscript.so /usr/local/lib/libvapoursynth-script.so && \
     ldconfig && \
@@ -133,9 +132,9 @@ COPY --from=build-libaom  /usr/local /usr/local
 COPY --from=build-libvmaf /usr/local /usr/local
 RUN ldconfig
 
-RUN wget -q https://ffmpeg.org/releases/ffmpeg-8.1.tar.xz -O /tmp/ffmpeg.tar.xz && \
+RUN wget -q https://ffmpeg.org/releases/ffmpeg-8.1.1.tar.xz -O /tmp/ffmpeg.tar.xz && \
     tar xf /tmp/ffmpeg.tar.xz -C /tmp && \
-    cd /tmp/ffmpeg-8.1 && \
+    cd /tmp/ffmpeg-8.1.1 && \
     ./configure \
         --prefix=/usr/local \
         --enable-gpl \
@@ -260,7 +259,7 @@ RUN ldconfig && \
 # each architecture (aarch64-linux-gnu vs x86_64-linux-gnu).
 RUN mkdir -p /home/Tdarr/.config/vapoursynth && \
     LIBPY="$(find /usr/lib -name 'libpython3.12.so.*' | head -1)" && \
-    printf '"/usr/local/lib/libvsscript.so.4" = ["/usr/bin/python3","%s"]\n' "$LIBPY" \
+    printf '"/usr/local/lib/libvsscript.so" = ["/usr/bin/python3","%s"]\n' "$LIBPY" \
         > /home/Tdarr/.config/vapoursynth/vapoursynth.toml
 RUN ln -sf /usr/local/share/vmaf/vmaf_v0.6.1.json /vmaf_v0.6.1.json \
     && ln -sf /usr/local/share/vmaf/vmaf_4k_v0.6.1.json /vmaf_4k_v0.6.1.json
@@ -277,7 +276,7 @@ RUN ldconfig && \
     rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /home/Tdarr/.config/vapoursynth && \
     LIBPY="$(find /usr/lib -name 'libpython3.12.so.*' | head -1)" && \
-    printf '"/usr/local/lib/libvsscript.so.4" = ["/usr/bin/python3","%s"]\n' "$LIBPY" \
+    printf '"/usr/local/lib/libvsscript.so" = ["/usr/bin/python3","%s"]\n' "$LIBPY" \
         > /home/Tdarr/.config/vapoursynth/vapoursynth.toml
 RUN ln -sf /usr/local/share/vmaf/vmaf_v0.6.1.json /vmaf_v0.6.1.json \
     && ln -sf /usr/local/share/vmaf/vmaf_4k_v0.6.1.json /vmaf_4k_v0.6.1.json

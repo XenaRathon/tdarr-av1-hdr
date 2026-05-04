@@ -34,6 +34,13 @@ symlink (`libvapoursynth-script.so → libvsscript.so`) is needed for av1an link
 A TOML config at `$HOME/.config/vapoursynth/vapoursynth.toml` is required at runtime
 to map libvsscript to the Python interpreter.
 
+**Build notes (R75):** R75 dropped the `build_wheel`/`enable_*` Meson options —
+every artifact (libs, vspipe, headers, pkgconfig) is now unconditionally installed
+into `py.get_install_dir() / 'vapoursynth'`, so the relocation step from the R74
+era still applies. R75 also dropped the `.so.4` soname for `libvsscript` (it now
+ships as plain `libvsscript.so`), so the runtime TOML must key off
+`/usr/local/lib/libvsscript.so`, not `libvsscript.so.4`.
+
 ---
 
 ## SVT-AV1 4.1.0 + FFmpeg 8.1
@@ -48,7 +55,7 @@ Earlier FFmpeg versions do not know about the 4.x API and will fail to build.
 
 ## Tdarr Base Image Version
 
-**Constraint:** Pin `TDARR_VERSION` to a specific version tag (currently `2.68.01`).
+**Constraint:** Pin `TDARR_VERSION` to a specific version tag (currently `2.71.01`).
 Do not use `:latest`.
 
 **Why:** Tdarr updates can change the base OS, bundled libraries, or init scripts in
