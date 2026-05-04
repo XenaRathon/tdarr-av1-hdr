@@ -505,21 +505,24 @@ publish_images() {
   local -a arches=("$@")
 
   for target in tdarr tdarr_node; do
+    for arch in "${arches[@]}"; do
+      echo "==> Pushing ${REGISTRY}/${target}:${arch}..."
+      docker tag "${target}:${arch}" "${REGISTRY}/${target}:${arch}"
+      docker push "${REGISTRY}/${target}:${arch}"
+    done
+
     if [[ ${#arches[@]} -gt 1 ]]; then
+      # Use buildx imagetools — docker manifest create/push has historically
+      # been unreliable and silently produced single-arch tags.
+      local -a refs=()
       for arch in "${arches[@]}"; do
-        echo "==> Pushing ${REGISTRY}/${target}:${arch}..."
-        docker tag "${target}:${arch}" "${REGISTRY}/${target}:${arch}"
-        docker push "${REGISTRY}/${target}:${arch}"
+        refs+=("${REGISTRY}/${target}:${arch}")
       done
-      echo "==> Creating manifest ${REGISTRY}/${target}:latest..."
-      docker manifest rm "${REGISTRY}/${target}:latest" 2>/dev/null || true
-      docker manifest create "${REGISTRY}/${target}:latest" \
-        "${REGISTRY}/${target}:amd64" \
-        "${REGISTRY}/${target}:arm64"
-      docker manifest push --purge "${REGISTRY}/${target}:latest"
+      echo "==> Creating manifest list ${REGISTRY}/${target}:latest..."
+      docker buildx imagetools create -t "${REGISTRY}/${target}:latest" "${refs[@]}"
     else
       local arch="${arches[0]}"
-      echo "==> Pushing ${REGISTRY}/${target}:latest..."
+      echo "==> Pushing ${REGISTRY}/${target}:latest (single arch ${arch})..."
       docker tag "${target}:${arch}" "${REGISTRY}/${target}:latest"
       docker push "${REGISTRY}/${target}:latest"
     fi
@@ -571,21 +574,23 @@ if [[ "$PUBLISH" == true ]]; then
   check_ghcr_auth
 fi
 
-# Determine if this is a publish-only run (--publish with no build-triggering flags)
+# Determine if this is a publish-only run (--publish with no build-triggering flags).
+# When triggered, auto-detect every locally-available arch and publish all of them
+# so that ./build.sh --publish always produces a multi-arch :latest if both arches
+# are present. Falling back to native arch silently produced a single-arch :latest
+# in the past, so be explicit here.
 PUBLISH_ONLY=false
 if [[ "$PUBLISH" == true && "$ENCODE" == false && "$STACK_ONLY" == false \
       && "$ALL_PLATFORMS" == false && -z "$SPECIFIC_ARCH" ]]; then
-  # Check if all required images already exist locally
-  local_images_exist=true
-  for arch in "${ARCHES[@]}"; do
-    for target in tdarr tdarr_node; do
-      if ! docker image inspect "${target}:${arch}" > /dev/null 2>&1; then
-        local_images_exist=false
-        break 2
-      fi
-    done
+  detected_arches=()
+  for arch in amd64 arm64; do
+    if docker image inspect "tdarr:${arch}" > /dev/null 2>&1 \
+        && docker image inspect "tdarr_node:${arch}" > /dev/null 2>&1; then
+      detected_arches+=("$arch")
+    fi
   done
-  if [[ "$local_images_exist" == true ]]; then
+  if [[ ${#detected_arches[@]} -gt 0 ]]; then
+    ARCHES=("${detected_arches[@]}")
     PUBLISH_ONLY=true
   fi
 fi
