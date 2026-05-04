@@ -48,7 +48,7 @@ Earlier FFmpeg versions do not know about the 4.x API and will fail to build.
 
 ## Tdarr Base Image Version
 
-**Constraint:** Pin `TDARR_VERSION` to a specific version tag (currently `2.68.01`).
+**Constraint:** Pin `TDARR_VERSION` to a specific version tag (currently `2.71.01`).
 Do not use `:latest`.
 
 **Why:** Tdarr updates can change the base OS, bundled libraries, or init scripts in

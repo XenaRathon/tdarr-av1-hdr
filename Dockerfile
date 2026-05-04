@@ -1,4 +1,4 @@
-ARG TDARR_VERSION=2.68.01
+ARG TDARR_VERSION=2.71.01
 FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -133,9 +133,9 @@ COPY --from=build-libaom  /usr/local /usr/local
 COPY --from=build-libvmaf /usr/local /usr/local
 RUN ldconfig
 
-RUN wget -q https://ffmpeg.org/releases/ffmpeg-8.1.tar.xz -O /tmp/ffmpeg.tar.xz && \
+RUN wget -q https://ffmpeg.org/releases/ffmpeg-8.1.1.tar.xz -O /tmp/ffmpeg.tar.xz && \
     tar xf /tmp/ffmpeg.tar.xz -C /tmp && \
-    cd /tmp/ffmpeg-8.1 && \
+    cd /tmp/ffmpeg-8.1.1 && \
     ./configure \
         --prefix=/usr/local \
         --enable-gpl \
