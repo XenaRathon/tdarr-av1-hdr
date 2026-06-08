@@ -12,8 +12,10 @@ variable "CACHE_DIR" {
 
 target "_defaults" {
   dockerfile = "Dockerfile"
-  cache-from = ["type=local,src=${CACHE_DIR}"]
-  cache-to   = ["type=local,dest=${CACHE_DIR},mode=max"]
+  # Local cache export is skipped when CACHE_DIR="" — buildkit's type=local
+  # cache store relies on rename semantics that virtiofs/9p/NFS mishandle.
+  cache-from = CACHE_DIR != "" ? ["type=local,src=${CACHE_DIR}"] : []
+  cache-to   = CACHE_DIR != "" ? ["type=local,dest=${CACHE_DIR},mode=max"] : []
 }
 
 target "av1-stack" {

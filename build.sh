@@ -36,6 +36,26 @@ done
 # shellcheck disable=SC2034  # SCRIPT_DIR used by later tasks
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# ── build cache location ─────────────────────────────────────────────────────
+# buildkit's type=local cache store relies on rename/stat semantics that
+# virtiofs / 9p / NFS / CIFS mishandle, which corrupts the cache export mid-build
+# (rename: no such file or directory). Auto-disable the local cache on those
+# filesystems. docker-bake.hcl treats CACHE_DIR="" as "no local cache".
+# Override by exporting CACHE_DIR yourself before running.
+if [[ -z "${CACHE_DIR+x}" ]]; then
+  _fstype=""
+  if command -v findmnt > /dev/null 2>&1; then
+    _fstype="$(findmnt -n -o FSTYPE --target "$SCRIPT_DIR" 2>/dev/null | head -1)"
+  fi
+  [[ -z "$_fstype" ]] && _fstype="$(stat -f -c %T "$SCRIPT_DIR" 2>/dev/null || echo "")"
+  case "$_fstype" in
+    virtiofs|9p|nfs|nfs4|cifs|smbfs|smb2|fuseblk|fuse|fuse.*)
+      echo "==> Build cache disabled: '${_fstype}' filesystem can't host buildkit's local cache."
+      export CACHE_DIR=""
+      ;;
+  esac
+fi
+
 # ── validation ───────────────────────────────────────────────────────────────
 
 platform_count=0
@@ -261,7 +281,9 @@ run_startup_check() {
   fi
 
   if [[ -n "$server_cid" ]]; then
-    for _ in $(seq 1 30); do
+    # 90s, not 30s: the upstream Tdarr server needs ~37s to boot under QEMU
+    # emulation (e.g. arm64 on an amd64 host), which a 30s window false-fails.
+    for _ in $(seq 1 90); do
       if docker exec "$server_cid" curl -sf http://localhost:8265 > /dev/null 2>&1; then
         server_ok=true
         break
