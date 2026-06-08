@@ -32,7 +32,7 @@ Plugins in the sibling `tdarr-plugins` repo depend on these paths at runtime:
 - `/usr/local/bin/av1an`
 - `/usr/local/bin/ab-av1`
 - `/usr/local/bin/ffmpeg`
-- `/usr/local/bin/mkvmerge`
+- `/usr/bin/mkvmerge` (from the `mkvtoolnix` apt package — not built to `/usr/local/bin`)
 - `/usr/local/bin/vspipe`
 - `/usr/local/share/vmaf/vmaf_v0.6.1.json`
 
