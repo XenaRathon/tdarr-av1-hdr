@@ -38,6 +38,10 @@ Plugins in the sibling `tdarr-plugins` repo depend on these paths at runtime:
 
 If any of these paths change, message the sibling repo.
 
+## Environment
+
+This repo lives on a Linux VM (`10.0.0.76`) that is itself a guest on the Unraid server which also hosts production Tdarr. **Tdarr is not local here:** its API is at `http://10.0.0.3:8265`, and the production node container `tdarr_node_ryzen_9950x` runs on the Unraid host (no `docker exec` into it from this VM). `localhost:8265` is valid only while a local `build.sh --interactive` test server is running on this VM. Docker + buildx are available here; `docker login ghcr.io` (token with `write:packages`) is required before any publish. For Unraid-host operations the user uses the sibling project `../hometower`.
+
 ## Memory
 
 User feedback and preferences are tracked in the memory system and should inform all suggestions. Check memory at the start of sessions.
@@ -50,8 +54,8 @@ This repo is part of a two-repo project. The sibling repo is at `../tdarr-plugin
 
 Agent-to-agent async messages between repos. Check your inbox at session start.
 
-- Own inbox: `~/.claude/projects/-Users-emilgrunden-ClaudeProjects-tdarr-av1/inbox/`
-- Sibling inbox: `~/.claude/projects/-Users-emilgrunden-ClaudeProjects-tdarr-plugins/inbox/`
+- Own inbox: `~/.claude/projects/-mnt-vm-data-ClaudeProjects-tdarr-av1/inbox/`
+- Sibling inbox: `~/.claude/projects/-mnt-vm-data-ClaudeProjects-tdarr-plugins/inbox/`
 
 Message format (one file per message, `YYYY-MM-DD-from-<repo>-<slug>.md`):
 
