@@ -190,8 +190,10 @@ ENV VAPOURSYNTH_LIB_DIR=/usr/local/lib
 
 COPY patches/av1an-vmaf.py /patches/av1an-vmaf.py
 
+# av1an's canonical repo moved from master-of-zen/Av1an to rust-av/Av1an.
+# (The old URL still redirects, but pin to the new canonical location.)
 RUN git clone --depth 1 --branch v0.5.2 \
-        https://github.com/master-of-zen/Av1an.git /src/av1an && \
+        https://github.com/rust-av/Av1an.git /src/av1an && \
     cd /src/av1an && \
     python3 /patches/av1an-vmaf.py && \
     cargo build --release && \
