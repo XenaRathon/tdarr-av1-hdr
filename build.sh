@@ -212,7 +212,7 @@ run_binary_checks() {
       ffmpeg -version 2>&1 | head -1
     ' 2>&1) || true
 
-  for pair in "av1an:0.5.2" "ab-av1:0.11.2" "ffmpeg:8.1"; do
+  for pair in "av1an:0.5.2" "ab-av1:0.11.3" "ffmpeg:8.1"; do
     local bin="${pair%%:*}" expected="${pair##*:}"
     if echo "$output" | grep -qi "${bin}.*${expected}"; then
       add_result "$platform" "${bin} version ${expected} (${label})" "OK"

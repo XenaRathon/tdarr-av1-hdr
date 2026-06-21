@@ -41,6 +41,16 @@ era still applies. R75 also dropped the `.so.4` soname for `libvsscript` (it now
 ships as plain `libvsscript.so`), so the runtime TOML must key off
 `/usr/local/lib/libvsscript.so`, not `libvsscript.so.4`.
 
+**Build notes (R76/R77, currently pinned):** Both are bugfix-only releases — no
+changes to the Meson build, install layout, sonames, or library names versus R75,
+so the R75 relocation logic carries over unchanged (only the branch string and the
+cosmetic `.pc` `Version:` fields move to 77). Two behavioural notes: R76 "once
+again uses `XDG_CONFIG_HOME`" for the config location (forgotten since R74) — our
+runtime TOML at `/home/Tdarr/.config/vapoursynth/vapoursynth.toml` is the XDG
+default and is honoured as long as `XDG_CONFIG_HOME` is unset in the container.
+R76 introduced a deadlock that R77 fixes, which is the reason to skip R76 and pin
+R77 directly.
+
 ---
 
 ## SVT-AV1 4.1.0 + FFmpeg 8.1
@@ -55,7 +65,7 @@ Earlier FFmpeg versions do not know about the 4.x API and will fail to build.
 
 ## Tdarr Base Image Version
 
-**Constraint:** Pin `TDARR_VERSION` to a specific version tag (currently `2.71.01`).
+**Constraint:** Pin `TDARR_VERSION` to a specific version tag (currently `2.78.01`).
 Do not use `:latest`.
 
 **Why:** Tdarr updates can change the base OS, bundled libraries, or init scripts in
