@@ -1,4 +1,4 @@
-ARG TDARR_VERSION=2.71.01
+ARG TDARR_VERSION=2.78.01
 FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -45,7 +45,7 @@ RUN git clone --depth 1 --branch v4.1.0 \
 
 FROM base AS build-libaom
 
-RUN wget -q "https://storage.googleapis.com/aom-releases/libaom-3.13.3.tar.gz" \
+RUN wget -q "https://storage.googleapis.com/aom-releases/libaom-3.14.1.tar.gz" \
         -O /tmp/libaom.tar.gz && \
     mkdir -p /src/aom && \
     tar -xf /tmp/libaom.tar.gz -C /src/aom --strip-components=1 && \
@@ -65,7 +65,7 @@ RUN wget -q "https://storage.googleapis.com/aom-releases/libaom-3.13.3.tar.gz" \
 
 FROM base AS build-libvmaf
 
-RUN git clone --depth 1 --branch v3.1.0 \
+RUN git clone --depth 1 --branch v3.2.0 \
         https://github.com/Netflix/vmaf.git /src/vmaf && \
     meson setup /src/vmaf/libvmaf/build /src/vmaf/libvmaf \
         --buildtype=release \
@@ -99,10 +99,10 @@ RUN git clone --depth 1 --branch release-3.0.6 \
 
 # MUST be R73 or later — av1an 0.5.2 uses vapoursynth-rs v0.5.1 which requires
 # VSScript API v4. R72 only provides API v3 and will fail to load at runtime.
-RUN git clone --depth 1 --branch R75 \
+RUN git clone --depth 1 --branch R77 \
         https://github.com/vapoursynth/vapoursynth.git /src/vapoursynth && \
     cd /src/vapoursynth && \
-    # R75 unconditionally installs every artifact (libs, vspipe, headers,
+    # R75+ unconditionally installs every artifact (libs, vspipe, headers,
     # pkgconfig) into the Python site-packages 'vapoursynth' subdirectory.
     # We relocate the libs and vspipe to standard /usr/local paths and write
     # our own headers + pc files there.
@@ -115,9 +115,9 @@ RUN git clone --depth 1 --branch R75 \
     install -d /usr/local/include/vapoursynth && \
     cp include/*.h /usr/local/include/vapoursynth/ && \
     install -d /usr/local/lib/pkgconfig && \
-    printf 'prefix=/usr/local\nlibdir=${prefix}/lib\nincludedir=${prefix}/include/vapoursynth\n\nName: vapoursynth\nDescription: VapourSynth\nVersion: 75\nLibs: -L${libdir} -lvapoursynth\nCflags: -I${includedir}\n' \
+    printf 'prefix=/usr/local\nlibdir=${prefix}/lib\nincludedir=${prefix}/include/vapoursynth\n\nName: vapoursynth\nDescription: VapourSynth\nVersion: 77\nLibs: -L${libdir} -lvapoursynth\nCflags: -I${includedir}\n' \
         > /usr/local/lib/pkgconfig/vapoursynth.pc && \
-    printf 'prefix=/usr/local\nlibdir=${prefix}/lib\nincludedir=${prefix}/include/vapoursynth\n\nName: vsscript\nDescription: VapourSynth Script Library\nVersion: 75\nRequires: vapoursynth\nLibs: -L${libdir} -lvsscript\nCflags: -I${includedir}\n' \
+    printf 'prefix=/usr/local\nlibdir=${prefix}/lib\nincludedir=${prefix}/include/vapoursynth\n\nName: vsscript\nDescription: VapourSynth Script Library\nVersion: 77\nRequires: vapoursynth\nLibs: -L${libdir} -lvsscript\nCflags: -I${includedir}\n' \
         > /usr/local/lib/pkgconfig/vsscript.pc && \
     # R74+ renamed libvapoursynth-script → libvsscript. av1an's vapoursynth-rs
     # crate still links -lvapoursynth-script, so provide a compat symlink.
@@ -132,9 +132,9 @@ COPY --from=build-libaom  /usr/local /usr/local
 COPY --from=build-libvmaf /usr/local /usr/local
 RUN ldconfig
 
-RUN wget -q https://ffmpeg.org/releases/ffmpeg-8.1.1.tar.xz -O /tmp/ffmpeg.tar.xz && \
+RUN wget -q https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz -O /tmp/ffmpeg.tar.xz && \
     tar xf /tmp/ffmpeg.tar.xz -C /tmp && \
-    cd /tmp/ffmpeg-8.1.1 && \
+    cd /tmp/ffmpeg-8.1.2 && \
     ./configure \
         --prefix=/usr/local \
         --enable-gpl \
@@ -190,8 +190,10 @@ ENV VAPOURSYNTH_LIB_DIR=/usr/local/lib
 
 COPY patches/av1an-vmaf.py /patches/av1an-vmaf.py
 
+# av1an's canonical repo moved from master-of-zen/Av1an to rust-av/Av1an.
+# (The old URL still redirects, but pin to the new canonical location.)
 RUN git clone --depth 1 --branch v0.5.2 \
-        https://github.com/master-of-zen/Av1an.git /src/av1an && \
+        https://github.com/rust-av/Av1an.git /src/av1an && \
     cd /src/av1an && \
     python3 /patches/av1an-vmaf.py && \
     cargo build --release && \
@@ -200,7 +202,7 @@ RUN git clone --depth 1 --branch v0.5.2 \
 
 FROM base AS build-ab-av1
 
-RUN cargo install ab-av1 --version 0.11.2 --root /usr/local
+RUN cargo install ab-av1 --version 0.11.3 --root /usr/local
 
 FROM ubuntu:24.04 AS av1-stack
 
