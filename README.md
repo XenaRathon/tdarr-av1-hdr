@@ -52,6 +52,10 @@ Standing on a lot of shoulders — thank you to:
 The fork's changes (encoder swap, HDR/DV/HDR10+/Opus build stages, CI, docs) were developed with the
 help of **Claude (Anthropic, Claude Opus 4.8)**.
 
+## Contributors
+See [`CONTRIBUTORS.md`](CONTRIBUTORS.md). Maintained by [@xenarathon](https://github.com/XenaRathon),
+co-developed with **Claude (Anthropic, Claude Opus 4.8)**.
+
 ## License
 This fork's own additions — the Dockerfile changes, GitHub Actions workflow, and documentation in this
 repository — are licensed **GPL-3.0** (see [`LICENSE`](LICENSE)). Files inherited from upstream

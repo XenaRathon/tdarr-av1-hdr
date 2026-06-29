@@ -75,7 +75,7 @@ COPY --from=build-libdovi      /usr/local /usr/local
 COPY --from=build-libhdr10plus /usr/local /usr/local
 RUN ldconfig
 
-RUN git clone --depth 1 --branch master \
+RUN git clone --depth 1 --branch v4.1.0 \
         https://github.com/Uranite/svt-av1-tritium.git /src/svtav1 && \
     cmake -S /src/svtav1 -B /src/svtav1/build \
         -G Ninja \
