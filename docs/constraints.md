@@ -4,6 +4,14 @@ Read this before editing the Dockerfile or changing any component version.
 
 This file is populated as decisions are made during development. Each entry records what the constraint is and why it exists — so the reason is never lost.
 
+| Component                   | Constraint                                                          |
+| --------------------------- | ------------------------------------------------------------------- |
+| Tdarr base OS               | Ubuntu 24.04 (Noble), exact match                                   |
+| VapourSynth                 | R74 or later (currently pinned R77)                                 |
+| SVT-AV1                     | 4.x requires FFmpeg 8.1+                                            |
+| Tdarr image                 | Pinned via `TDARR_VERSION` (currently `2.78.01`), never `:latest`   |
+| Jellyfin ffmpeg init script | Must be removed on amd64 (`rm -f /etc/cont-init.d/03-setup-ffmpeg`) |
+
 ---
 
 ## Tdarr Base OS
@@ -82,4 +90,3 @@ before adopting it. The same `ARG` controls both the `tdarr` and `tdarr_node` st
 symlinks Jellyfin's ffmpeg (no libvmaf) to `/usr/local/bin/ffmpeg` on every
 container start. This overwrites our custom ffmpeg at runtime regardless of what
 the Dockerfile does at build time. Removing the init script is the only fix.
-
