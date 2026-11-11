@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # shellcheck disable=SC2034  # used by later tasks
-REGISTRY="ghcr.io/empaa"
+REGISTRY="ghcr.io/xenarathon"
 BUILDER_NAME="multiplatform"
 # shellcheck disable=SC2034  # used by later tasks
 BINARIES=(av1an ab-av1 ffmpeg)

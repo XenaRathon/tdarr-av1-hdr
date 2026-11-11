@@ -1,0 +1,80 @@
+name: build-and-publish
+
+# Builds the HDR/Dolby-Vision Tdarr server + node images (SVT-AV1-Tritium) for amd64,
+# smoke-tests the encoder, and publishes to GitHub Container Registry so the Plex PC /
+# OMV server can pull them directly:
+#   ghcr.io/<owner>/tdarr-av1-hdr-server:latest
+#   ghcr.io/<owner>/tdarr-av1-hdr-node:latest
+on:
+  push:
+    branches: [tritium, main]
+    paths: [Dockerfile, docker-bake.hcl, build.sh, patches/**, .github/workflows/build.yml]
+  workflow_dispatch:
+
+env:
+  # PC node (7700X) and OMV server are both amd64 — single-arch build, native on the runner.
+  ARCH: amd64
+  PLATFORM: linux/amd64
+  # Disable bake's local cache store; we use GitHub Actions cache instead.
+  CACHE_DIR: ""
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute lowercase image names
+        id: img
+        run: |
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "server=ghcr.io/${owner}/tdarr-av1-hdr-server" >> "$GITHUB_OUTPUT"
+          echo "node=ghcr.io/${owner}/tdarr-av1-hdr-node" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 1) Build the node image locally and smoke-test the encoder BEFORE publishing.
+      - name: Build node (load for smoke test)
+        run: |
+          docker buildx bake -f docker-bake.hcl tdarr_node \
+            --set tdarr_node.tags=tdarr-node-smoke:latest \
+            --set "*.cache-from=type=gha" \
+            --set "*.cache-to=type=gha,mode=max" \
+            --set tdarr_node.output=type=docker
+
+      - name: Smoke-test (Tritium link + DV/HDR10+/libopus + real encode)
+        run: |
+          docker run --rm --entrypoint bash tdarr-node-smoke:latest -c '
+            set -euo pipefail
+            echo "== ffmpeg =="; ffmpeg -hide_banner -version | head -1
+            echo "== libsvtav1 present =="; ffmpeg -hide_banner -encoders 2>/dev/null | grep -i libsvtav1
+            echo "== libopus present =="; ffmpeg -hide_banner -h encoder=libopus >/dev/null 2>&1 && echo "libopus OK"
+            echo "== SvtAv1EncApp =="; SvtAv1EncApp --version
+            echo "== Tritium HDR/DV params =="; SvtAv1EncApp --help 2>&1 | grep -iE "dolby-vision-rpu|hdr10plus-json|variance-boost-curve|ac-bias"
+            echo "== libdovi linked into encoder =="; ldd "$(command -v SvtAv1EncApp)" | grep -i dovi || (ldconfig -p | grep -i dovi)
+            echo "== HDR tools =="; dovi_tool --version; hdr10plus_tool --version
+            echo "== real libsvtav1 encode (proves runtime link) =="
+            ffmpeg -hide_banner -f lavfi -i testsrc=d=1:s=256x256 -c:v libsvtav1 -preset 8 -y /tmp/o.mkv
+            echo "SMOKE OK"
+          '
+
+      # 2) Publish both server + node to ghcr (reuses the cached layers from step 1).
+      - name: Build & push server + node
+        run: |
+          docker buildx bake -f docker-bake.hcl tdarr tdarr_node \
+            --set tdarr.tags=${{ steps.img.outputs.server }}:latest \
+            --set tdarr_node.tags=${{ steps.img.outputs.node }}:latest \
+            --set "*.cache-from=type=gha" \
+            --set "*.cache-to=type=gha,mode=max" \
+            --set "tdarr.output=type=registry" \
+            --set "tdarr_node.output=type=registry"

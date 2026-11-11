@@ -1,0 +1,12 @@
+Merge upstream main, keep fork HDR additions intact
+
+Merged upstream `main` (empaa/tdarr-av1) to keep the fork updated. Resolved merge conflicts by preserving our custom features:
+
+- `Dockerfile`: Kept the `libopus`, `libdovi`, `libhdr10plus` build stages, and our `svtav1` fork (Tritium). Added upstream's new VapourSynth configurations (NLM ISPC).
+- `build.sh`: Maintained the custom ghcr.io/xenarathon registry push targets.
+- `README.md`: Kept our additions listing the `tdarr-av1-hdr` features while updating upstream changes to format and plugins text.
+- `docs/architecture.md`: Combined changes carefully keeping our component build context diagrams and version pins. Added upstream's NLM ISPC step.
+- `docs/build-and-publish.md`: Retained original fork documentation format.
+- `docs/constraints.md`: Kept HDR and Opus constraints while appending new upstream explanations.
+
+Checks run locally (failed on BuildKit local cache overlayfs due to environment virtualization block, but files are correctly patched and checked manually).
