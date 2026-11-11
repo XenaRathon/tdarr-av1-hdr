@@ -29,15 +29,61 @@ RUN apt-get update && apt-get install -y \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 ENV PATH="/root/.cargo/bin:${PATH}"
 
+FROM base AS build-libopus
+
+# libopus 1.6.1 — empaa's ffmpeg ships WITHOUT libopus. Bundle the latest reference encoder so
+# audio can be transcoded with `-c:a libopus` (far better quality than ffmpeg's native opus encoder).
+RUN git clone --depth 1 --branch v1.6.1 https://github.com/xiph/opus.git /src/opus && \
+    cd /src/opus && \
+    ./autogen.sh && \
+    ./configure --prefix=/usr/local --enable-shared --disable-static && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /src
+
+FROM base AS build-libdovi
+
+# libdovi (Dolby Vision) C library from quietvoid/dovi_tool, built via cargo-c. Lets SVT-AV1-Tritium
+# inject the DV RPU into the AV1 stream (--dolby-vision-rpu). Installs dovi.pc into PKG_CONFIG_PATH.
+RUN cargo install cargo-c
+RUN git clone --depth 1 --branch 2.3.2 https://github.com/quietvoid/dovi_tool.git /src/dovi && \
+    cd /src/dovi/dolby_vision && \
+    cargo cinstall --release --prefix=/usr/local --libdir=/usr/local/lib && \
+    ldconfig && \
+    rm -rf /src /root/.cargo/registry
+
+FROM base AS build-libhdr10plus
+
+# libhdr10plus C library from quietvoid/hdr10plus_tool, built via cargo-c. Lets SVT-AV1-Tritium carry
+# HDR10+ dynamic metadata (--hdr10plus-json). Installs hdr10plus.pc into PKG_CONFIG_PATH.
+RUN cargo install cargo-c
+RUN git clone --depth 1 --branch 1.7.2 https://github.com/quietvoid/hdr10plus_tool.git /src/h10p && \
+    cd /src/h10p/hdr10plus && \
+    cargo cinstall --release --prefix=/usr/local --libdir=/usr/local/lib && \
+    ldconfig && \
+    rm -rf /src /root/.cargo/registry
+
 FROM base AS build-svtav1
 
+# SVT-AV1-Tritium (fork of SVT-AV1-HDR incorporating SVT-AV1-PSYEX + Essential features) replaces
+# mainline SVT-AV1. Same project VERSION 4.1.0 -> same libSvtAv1Enc.so.4 SONAME, so ffmpeg's
+# --enable-libsvtav1 links against it natively (ab-av1's libsvtav1 path) and SvtAv1EncApp (av1an's
+# direct path) is Tritium too. Built with Dolby Vision (LIBDOVI_FOUND) + HDR10+ (LIBHDR10PLUS_RS_FOUND)
+# support; the C libs are copied in and found via pkg-config (mirrors Build/linux/build.sh's mapping).
+COPY --from=build-libdovi      /usr/local /usr/local
+COPY --from=build-libhdr10plus /usr/local /usr/local
+RUN ldconfig
+
 RUN git clone --depth 1 --branch v4.1.0 \
-        https://gitlab.com/AOMediaCodec/SVT-AV1.git /src/svtav1 && \
+        https://github.com/Uranite/svt-av1-tritium.git /src/svtav1 && \
     cmake -S /src/svtav1 -B /src/svtav1/build \
         -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
-        -DBUILD_SHARED_LIBS=ON && \
+        -DBUILD_SHARED_LIBS=ON \
+        -DLIBDOVI_FOUND=1 \
+        -DLIBHDR10PLUS_RS_FOUND=1 && \
     cmake --build /src/svtav1/build -j$(nproc) && \
     cmake --install /src/svtav1/build && \
     ldconfig && \
@@ -127,9 +173,12 @@ RUN git clone --depth 1 --branch R77 \
 
 FROM base AS build-ffmpeg
 
-COPY --from=build-svtav1  /usr/local /usr/local
-COPY --from=build-libaom  /usr/local /usr/local
-COPY --from=build-libvmaf /usr/local /usr/local
+COPY --from=build-svtav1       /usr/local /usr/local
+COPY --from=build-libaom       /usr/local /usr/local
+COPY --from=build-libvmaf      /usr/local /usr/local
+COPY --from=build-libopus      /usr/local /usr/local
+COPY --from=build-libdovi      /usr/local /usr/local
+COPY --from=build-libhdr10plus /usr/local /usr/local
 RUN ldconfig
 
 RUN wget -q https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz -O /tmp/ffmpeg.tar.xz && \
@@ -143,7 +192,8 @@ RUN wget -q https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz -O /tmp/ffmpeg.tar.x
         --disable-doc \
         --enable-libsvtav1 \
         --enable-libaom \
-        --enable-libvmaf && \
+        --enable-libvmaf \
+        --enable-libopus && \
     make -j$(nproc) && \
     make install && \
     ldconfig && \
@@ -212,8 +262,11 @@ COPY --from=build-libvmaf     /usr/local /usr/local
 COPY --from=build-vapoursynth /usr/local /usr/local
 COPY --from=build-ffmpeg      /usr/local /usr/local
 COPY --from=build-lsmash      /usr/local /usr/local
-COPY --from=build-av1an       /usr/local /usr/local
-COPY --from=build-ab-av1      /usr/local /usr/local
+COPY --from=build-av1an        /usr/local /usr/local
+COPY --from=build-ab-av1       /usr/local /usr/local
+COPY --from=build-libopus      /usr/local /usr/local
+COPY --from=build-libdovi      /usr/local /usr/local
+COPY --from=build-libhdr10plus /usr/local /usr/local
 
 # R74 wheel build installs the Python module to python3/dist-packages; also keep
 # site-packages for any pip-installed packages (e.g. future VS plugins).
@@ -254,8 +307,23 @@ COPY --from=av1-stack /etc/vapoursynth /etc/vapoursynth
 ENV PYTHONPATH=/usr/local/lib/python3/dist-packages:/usr/local/lib/python3.12/site-packages
 RUN ldconfig && \
     apt-get update && \
-    apt-get install -y --no-install-recommends python3 libpython3.12 mkvtoolnix && \
+    apt-get install -y --no-install-recommends python3 libpython3.12 mkvtoolnix curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
+# dovi_tool + hdr10plus_tool CLIs (quietvoid) for the AV1 flow's HDR / Dolby-Vision branches —
+# extract the DV RPU / HDR10+ JSON that the Tritium encoder then re-injects. Version-pinned to match
+# the libdovi / libhdr10plus the encoder was linked against.
+RUN set -eux; \
+    for spec in "dovi_tool:2.3.2" "hdr10plus_tool:1.7.2"; do \
+        name="${spec%%:*}"; ver="${spec##*:}"; \
+        url="$(curl -fsSL "https://api.github.com/repos/quietvoid/${name}/releases/tags/${ver}" \
+              | grep browser_download_url | grep 'x86_64-unknown-linux-musl' | head -n1 | cut -d '"' -f4)"; \
+        curl -fsSL "$url" -o /tmp/${name}.tar.gz; \
+        tar -xzf /tmp/${name}.tar.gz -C /usr/local/bin; \
+        chmod +x /usr/local/bin/${name}; \
+        rm /tmp/${name}.tar.gz; \
+    done; \
+    /usr/local/bin/dovi_tool --version; \
+    /usr/local/bin/hdr10plus_tool --version
 # VapourSynth R74 requires a TOML config mapping libvsscript to the Python
 # interpreter. Generate it dynamically so the libpython path is correct for
 # each architecture (aarch64-linux-gnu vs x86_64-linux-gnu).
@@ -274,8 +342,23 @@ COPY --from=av1-stack /etc/vapoursynth /etc/vapoursynth
 ENV PYTHONPATH=/usr/local/lib/python3/dist-packages:/usr/local/lib/python3.12/site-packages
 RUN ldconfig && \
     apt-get update && \
-    apt-get install -y --no-install-recommends python3 libpython3.12 mkvtoolnix && \
+    apt-get install -y --no-install-recommends python3 libpython3.12 mkvtoolnix curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
+# dovi_tool + hdr10plus_tool CLIs (quietvoid) for the AV1 flow's HDR / Dolby-Vision branches —
+# extract the DV RPU / HDR10+ JSON that the Tritium encoder then re-injects. Version-pinned to match
+# the libdovi / libhdr10plus the encoder was linked against.
+RUN set -eux; \
+    for spec in "dovi_tool:2.3.2" "hdr10plus_tool:1.7.2"; do \
+        name="${spec%%:*}"; ver="${spec##*:}"; \
+        url="$(curl -fsSL "https://api.github.com/repos/quietvoid/${name}/releases/tags/${ver}" \
+              | grep browser_download_url | grep 'x86_64-unknown-linux-musl' | head -n1 | cut -d '"' -f4)"; \
+        curl -fsSL "$url" -o /tmp/${name}.tar.gz; \
+        tar -xzf /tmp/${name}.tar.gz -C /usr/local/bin; \
+        chmod +x /usr/local/bin/${name}; \
+        rm /tmp/${name}.tar.gz; \
+    done; \
+    /usr/local/bin/dovi_tool --version; \
+    /usr/local/bin/hdr10plus_tool --version
 RUN mkdir -p /home/Tdarr/.config/vapoursynth && \
     LIBPY="$(find /usr/lib -name 'libpython3.12.so.*' | head -1)" && \
     printf '"/usr/local/lib/libvsscript.so" = ["/usr/bin/python3","%s"]\n' "$LIBPY" \
